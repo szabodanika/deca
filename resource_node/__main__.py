@@ -7,14 +7,15 @@ from common.util import generate_id
 import subprocess
 import requests
 import random
-
-# constants
-SS_HOST = "0.0.0.0"
+import time
+import setproctitle
+import common.system_constants as system_constants
 
 HOST = "0.0.0.0"
 PORT = 0
 NAME = ""
 CAPABILITIES = {}
+SIMULATED_DELAY_MS = 500
 
 node_id = -1
 
@@ -28,24 +29,29 @@ sim_state = {
 }
 
 def main(args):
-    global PORT
-    global NAME
-    global CAPABILITIES
+    try:
+        global PORT
+        global NAME
+        global CAPABILITIES
 
-    PORT = args[1]
-    NAME = args[3]
-    CAPABILITIES = [args[5]]
-    print(f'[SA NODE {node_id}] Starting on {HOST}:{PORT}')
+        setproctitle.setproctitle(f'DECA - SA NODE {node_id} (Python)')
 
-    # 1. start listening
-    listening_thread = threading.Thread(target=listen)
-    listening_thread.start()
+        PORT = args[1]
+        NAME = args[3]
+        CAPABILITIES = [args[5]]
+        print(f'[SA NODE {node_id}] {NAME} starting on {HOST}:{PORT} with capabilities {CAPABILITIES}')
+
+        # 1. start listening
+        listening_thread = threading.Thread(target=listen)
+        listening_thread.start()
+        
+        
+        # 2. super server callback
+        ss_callback_thread = threading.Thread(target=ss_callback)
+        ss_callback_thread.start()
+    except KeyboardInterrupt:
+        sys.exit(1)
     
-    
-    # 2. super server callback
-    ss_callback_thread = threading.Thread(target=ss_callback)
-    ss_callback_thread.start()
-
 def listen() -> None:
     global switch_on
     global sensor_reading
@@ -62,14 +68,22 @@ def listen() -> None:
 
     @app.route("/sensor_read")
     def sensor_read():
-        return sim_state['sensor']
+        print(f'[SA NODE {node_id}] {NAME} performing sensor_read')
+        time.sleep(SIMULATED_DELAY_MS/1000) 
+        return {
+            'value' : sim_state['sensor']
+        }
     
     @app.route("/actuator_switch")
     def actuator_switch():
+        time.sleep(SIMULATED_DELAY_MS/1000) 
         data = request.json
-        # Extract the new_node_id from the response JSON
+        print(f'[SA NODE {node_id}] {NAME} performing actuator_switch => {data["actuator_switch"]}')
+
         sim_state['switch'] = data['actuator_switch']
-        return sensor_reading
+        return {
+            'value' : sim_state['switch']
+        }
 
     app.run(port=PORT)
     
@@ -77,7 +91,8 @@ def listen() -> None:
 
     
 def ss_callback() -> None:
-    url = f"http://{SS_HOST}:8000/register_resource"
+    global node_id
+    url = f"http://{system_constants.SS_HOST}:{system_constants.SS_PORT}/register_resource"
     response = requests.get(url, json={
         'host' : HOST,
         'port' : PORT,
@@ -85,10 +100,12 @@ def ss_callback() -> None:
         'name' : NAME
     })
 
+
     # Check if the request was successful
     if response.status_code == 200:
         # Extract the new_node_id from the response JSON
         node_id = response.json()['new_node_id']
+        setproctitle.setproctitle(f'DECA - SA NODE {node_id} (Python)')
         print(f'[SA NODE {node_id}] received node ID from SS: {node_id}')
     else:
         print("[SA NODE {node_id}] Request failed with status code:", response.status_code)

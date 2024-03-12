@@ -2,29 +2,34 @@ import subprocess
 import signal
 import os
 import time
+
+import setproctitle
+
 def main(args):
+
+    setproctitle.setproctitle(f'DECA - runner (Python)')
 
     # 0. clear terminal
     os.system('clear')
 
-    # 1. make sure all processes are shut down
+    # 1. make sure all processes are shut down (optional)
 
-    ports = [
-        '8000',
-        '8001',
-        '8002',
-        '9000',
-        '9001',
-        '9002',
-        '9003',
-        '9004',
-    ]
+    # ports = [
+    #     '8000',
+    #     '8001',
+    #     '8002',
+    #     '9000',
+    #     '9001',
+    #     '9002',
+    #     '9003',
+    #     '9004',
+    # ]
 
-    for p in ports:
-        subprocess.Popen([
-            "curl",
-            f'0.0.0.0:{p}/shutdown',
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # for p in ports:
+    #     subprocess.Popen([
+    #         "curl",
+    #         f'0.0.0.0:{p}/shutdown',
+    #     ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # 2. start the processes now
 
@@ -77,17 +82,25 @@ def main(args):
         "../embodiment_node/__main__.py",
         "--port",
         "9003",
+        "--capabilities",
+        "text_in",
+        "text_out",
         ]
     processes.append(subprocess.Popen(embodiment1))
 
     # 1000ms delay
-    time.sleep(1)
+    time.sleep(50/1000)
+    # TODO: fix SS terminating itself instead of CA 3 after terminating CA 2
 
     embodiment2 = [
         "python",
         "../embodiment_node/__main__.py",
         "--port",
         "9004",
+        "--capabilities",
+        "text_in",
+        "text_out",
+        "image_out",
         ]
     processes.append(subprocess.Popen(embodiment2))
 
@@ -98,9 +111,7 @@ def main(args):
     input()
 
     for p in processes:
-        print(f'[RUNNER] terminating process {os.getpgid(p.pid)}')
-        os.killpg(os.getpgid(p.pid), signal.SIGTERM)
-
+        p.kill()
 
 
 if __name__ == '__main__':
