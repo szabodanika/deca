@@ -283,7 +283,7 @@ def init_ca(index: int) -> None:
 
 
     try:
-        print("PROBLEMO ", ca_processes[index])
+        print(f'[SS NODE] Error: CA {ca_processes[index]} already has a running process')
         return
     except Exception as e:
         pass
@@ -311,10 +311,10 @@ def shutdown_ca(index: int) -> None:
             # Process is still running
             ca_processes[index].terminate()
             processes_shutdown += 1
+            del ca_processes[index]
+            del ca_registry[index]
         else:
             print(f'[SS NODE] Error shutting down CA {index+1}/{CAPACITY}:Process has already terminated.')
-        del ca_processes[index]
-        del ca_registry[index]
     except Exception as e:
         print(f"[SS NODE] Error shutting down CA {index+1}/{CAPACITY}: {e}")
 
