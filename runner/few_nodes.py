@@ -12,21 +12,20 @@ try:
 
     # Be careful with scale above 10
     # Start at 1 to clearly see what happens in the output and increase for more stress
-    SCALE = 10
+    SCALE = 1
 
     # Based on initial testing, less than 50ms leads to errors already -> nodes need time to start up
     # increase to see output more clearly
     SLEEP_BETWEEN_STEPS_MS = 200
 
-    RESOURCE_TYPE_1_COUNT = 2 * SCALE
-    RESOURCE_TYPE_2_COUNT = 2 * SCALE
-    EMBODIMENT_TYPE_1_COUNT = 3 * SCALE
-    EMBODIMENT_TYPE_2_COUNT = 3 * SCALE
-    SS_CAPACITY = 20 * SCALE
-    SS_MIN_STANDBY_CA = 4 * SCALE
-    SS_INCREMENTS = 4 * SCALE
-    MIN_IDLE_CA = 2 * SCALE
-
+    RESOURCE_TYPE_1_COUNT = 1
+    RESOURCE_TYPE_2_COUNT = 1
+    EMBODIMENT_TYPE_1_COUNT = 1
+    EMBODIMENT_TYPE_2_COUNT = 1 
+    SS_CAPACITY = 10
+    SS_MIN_STANDBY_CA = 2
+    SS_INCREMENTS = 2
+    MIN_IDLE_CA = 1
 
     setproctitle.setproctitle(f'DECA - runner (Python)')
 

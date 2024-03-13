@@ -58,9 +58,9 @@ def listen() -> None:
     # remove most of the annoying flask logs
     import logging
     log = logging.getLogger('werkzeug')
-    log.disabled = True
+    # log.disabled = True
     log.setLevel(logging.ERROR)
-    app.logger.disabled = True
+    # app.logger.disabled = True
 
     @app.route("/shutdown")
     def shutdown():

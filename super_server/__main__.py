@@ -86,8 +86,8 @@ def main(args) -> None:
         initialising_ca_servers_thread.start()
 
          # 3. start up periodic idle count checker
-        check_shutdown_needed_thread = threading.Thread(target=check_shutdown_needed)
-        check_shutdown_needed_thread.start()
+        # check_shutdown_needed_thread = threading.Thread(target=check_shutdown_needed)
+        # check_shutdown_needed_thread.start()
     except KeyboardInterrupt:
         sys.exit(1)
 
@@ -309,7 +309,7 @@ def shutdown_ca(index: int) -> None:
         print(f'[SS NODE] shutting down CA {index+1}/{CAPACITY} - PID {ca_processes[index].pid}')
         if ca_processes[index].poll() is None:
             # Process is still running
-            ca_processes[index].kill()
+            ca_processes[index].terminate()
             processes_shutdown += 1
         else:
             print(f'[SS NODE] Error shutting down CA {index+1}/{CAPACITY}:Process has already terminated.')

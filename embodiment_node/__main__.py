@@ -10,6 +10,7 @@ from flask import Flask
 import setproctitle
 import time
 import common.system_constants as system_constants
+import random
 
 # constants
 HOST = "0.0.0.0"
@@ -64,11 +65,13 @@ def listen() -> None:
         global mutex_timestamp
         incoming_timestamp = request.json
 
-        if(mutex_timestamp != None and mutex_timestamp['time'] < incoming_timestamp['time']):
-            # wait until our mutex lock is not needed anymore
-            while(mutex_timestamp != None):
-                # prevent going bananas on the cpu
-                time.sleep(1)
+        if(mutex_timestamp != None):
+            if(mutex_timestamp['id'] == incoming_timestamp['id']):
+                if(mutex_timestamp['time'] <= incoming_timestamp['time']):
+                    # wait until our mutex lock is not needed anymore
+                    while(mutex_timestamp != None):
+                        # prevent going bananas on the cpu
+                        time.sleep(1)
 
         return {
             'response': 'ok'
@@ -151,37 +154,6 @@ def update_registry() -> None:
         print(f'[CA NODE {node_id}] Request update_registry failed with status code:', response.status_code)
     return
 
-
-# obtain mutual exclusion accessess given resource
-def obtain_lock_on_resource(resource) -> bool:
-    global node_registry
-    global mutex_timestamp
-
-    mutex_timestamp = {
-        'id': resource["id"],
-        'time': current_time_in_ms()
-    }
-
-    ok_counter = 0
-
-    for _, node in node_registry.items():
-        url = f'http://{node["host"]}:{node["port"]}/mutex'
-        response = requests.get(url, json= mutex_timestamp)
-        # Check if the request was successful
-        if response.status_code == 200:
-            # Extract the new_node_id from the response JSON
-            response = response.json()['response']
-            if(response == 'ok'):
-                ok_counter += 1
-            else:
-                return False
-        else:
-            print(f'[CA NODE {node_id}] Mutex request failed with status code:', response.status_code)
-    
-    print(f'[CA NODE {node_id}] Obtained lock on {resource["name"]} after asking {ok_counter} nodes')
-
-    return True
-
 def send_user_input(input: str):
     global ca_node
     url = f"http://{ca_node['host']}:{ca_node['port']}/user_input"
@@ -215,14 +187,19 @@ def disconnect_from_ca():
 
     return 
    
-
+# SIMULATED USER BEHAVIOUR
 # Because we don't have actual people to use the embodiments, they will be programmed to behave a certain way.
 def sim_behaviour():
-    global ca_node
+    for _ in range (3):
+        time.sleep(random.randint(0,5) / 10)
 
-    response = send_user_input('Hello!')
+        if(random.randint(0,1) == 1):
+            send_user_input('Hello!')
 
-    response = send_user_input('How are you?')
+        time.sleep(random.randint(0,5) / 10)
+
+        if(random.randint(0,1) == 1):
+            send_user_input('How are you?')
 
     pass
 

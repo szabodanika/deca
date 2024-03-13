@@ -9,8 +9,10 @@ import requests
 from flask import Flask, request
 import time
 import setproctitle
+import random
 
 HOST = "0.0.0.0"
+
 PORT = 0
 
 # ms of delay when handling user input
@@ -18,6 +20,8 @@ SIMULATED_DELAY_MS = 500
 
 # begin using resources after this many MS 
 USE_RESOURCES_DELAY_MS = 5_000
+
+MUTEX_TIMEOUT_MS = 1_000
 
 node_id = -1
 embodiment_node = {}
@@ -28,6 +32,8 @@ mutex_timestamp = None
 # Flask app required for listening to incoming HTTP requests
 app = Flask(__name__)
 
+# TODO: still not everyone seems to get their mutex locks that try to get it
+# also not every node seems to want to perform SA action at the end? like 5/8?
 
 def main(args):
     try:
@@ -60,9 +66,9 @@ def listen() -> None:
     # remove most of the annoying flask logs
     import logging
     log = logging.getLogger('werkzeug')
-    # log.disabled = True
+    log.disabled = True
     log.setLevel(logging.ERROR)
-    # app.logger.disabled = True
+    app.logger.disabled = True
 
     # this is where a newly started EN checks in
     @app.route("/handshake")
@@ -91,11 +97,13 @@ def listen() -> None:
         incoming_timestamp = request.json
 
         if(mutex_timestamp != None):
-            if(mutex_timestamp['time'] > incoming_timestamp['time']):
-                # wait until our mutex lock is not needed anymore
-                while(mutex_timestamp != None):
-                    # prevent going bananas on the cpu
-                    time.sleep(1)
+            if(mutex_timestamp['id'] == incoming_timestamp['id']):
+                if(mutex_timestamp['time'] <= incoming_timestamp['time']):
+                    # wait until our mutex lock is not needed anymore
+                    while(mutex_timestamp != None):
+                        # print(f'[CA NODE {node_id}] still locked on {mutex_timestamp["id"]}, sorry!')
+                        # prevent going bananas on the cpu
+                        time.sleep(1)
 
         return {
             'response': 'ok'
@@ -129,20 +137,32 @@ def listen() -> None:
     
     return
 
+
+# SIMULATED USER BEHAVIOUR
 def use_resources():
 
     # 1. update registry before we can decide what to use
     # again this is something that's only needed because we don't have humans
     # to go push buttons and whatever
     update_registry()
+    for _ in range (10):
+        time.sleep(USE_RESOURCES_DELAY_MS/1000)
+        for _, r in resource_registry.items():
+            switch_action = 'True'
+            if(random.randint(0,2) == 1):
+                switch_action = 'False'
 
-    time.sleep(USE_RESOURCES_DELAY_MS/1000)
-    
-    for _, r in resource_registry.items():
-        if 'actuator_switch' in r['capabilities']:
-            access_resource(r, 'actuator_switch', 'True')
-        if 'sensor_read' in r['capabilities']:
-            access_resource(r, 'sensor_read')
+            time.sleep(random.randint(0,5) / 10)
+
+            if(random.randint(0,1) == 1):
+                if 'actuator_switch' in r['capabilities']:
+                    access_resource(r, 'actuator_switch', switch_action)
+
+            time.sleep(random.randint(0,5) / 10)
+
+            if(random.randint(0,1) == 1):
+                if 'sensor_read' in r['capabilities']:
+                    access_resource(r, 'sensor_read')
 
 # This is where the CA takes the input text, acts based on it and gives some response.
 # Normally it would connect to a Rasa chatbot server for example but for now it will be kept simple for the proof of concept
@@ -175,7 +195,6 @@ def access_resource(resource, action, param = None):
         'value': None,
     }
 
-    # 1. update registry if we can
     update_registry()
 
     # 2. contact each node
@@ -210,19 +229,30 @@ def access_resource(resource, action, param = None):
     # 4. remove mutex lock
     mutex_timestamp = None
 
-    print(f'[CA NODE successfully {node_id}] performed {action} on {resource["name"]} result: { result}')
+    print(f'[CA NODE {node_id}] successfully performed {action} on {resource["name"]} result: { result}')
 
     return result
 
 def update_registry() -> None:
     global node_registry
+    global node_id
     global resource_registry
+
     url = f"http://{system_constants.SS_HOST}:{system_constants.SS_PORT}/get_nodes"
     response = requests.get(url, json={})
     # Check if the request was successful
     if response.status_code == 200:
         # Extract the new_node_id from the response JSON
         node_registry = response.json()['ca_registry']
+        
+        # obviously we remove this CA from the registry
+        self_index = 0
+        for index, node in node_registry.items():
+            if(int(node_id) == int(node['id'])):
+                self_index = index
+        del node_registry[self_index]
+                
+                
         resource_registry = response.json()['resource_registry']
     else:
         print(f'[CA NODE {node_id}] Request update_registry failed with status code:', response.status_code)
@@ -239,13 +269,16 @@ def obtain_lock_on_resource(resource) -> bool:
     }
 
     ok_counter = 0
+    timeout_counter = 0
+    timeout_ids = []
 
     # TODO: continue from here, not everyone seems to receive their mutex locks
     for _, node in node_registry.items():
         url = f'http://{node["host"]}:{node["port"]}/mutex'
+        # print(f'[CA NODE {node_id}] Mutex on: {resource["name"]} {_}/{len(node_registry.items())}')
         try:
             # print(f'[CA NODE {node_id}] waiting for {_}/{len(node_registry.items())}')
-            response = requests.get(url, json= mutex_timestamp)
+            response = requests.get(url, json= mutex_timestamp, timeout=(MUTEX_TIMEOUT_MS/1000))
             # Check if the request was successful
             if response.status_code == 200:
                 # Extract the new_node_id from the response JSON
@@ -256,10 +289,18 @@ def obtain_lock_on_resource(resource) -> bool:
                     return False
             else:
                 print(f'[CA NODE {node_id}] Mutex request failed with status code:', response.status_code)
+        except requests.Timeout:
+            timeout_counter += 1
+            timeout_ids.append(node['id'])
+            # print(f'[CA NODE {node_id}] Mutex request timed out at node {node["id"]} for resource {resource["name"]}')
+            # Skipping this node')
+            pass
         except Exception as e:
             print(f'[CA NODE {node_id}] Mutex request failed on ', node)
+            return False
     
-    print(f'[CA NODE {node_id}] Obtained lock on {resource["name"]} after asking {ok_counter} nodes')
+    
+    print(f'[CA NODE {node_id}] Obtained lock on {resource["name"]}. OKs: {ok_counter} TIMEOUTs: {timeout_counter} (nodes: {timeout_ids})')
 
     return True
 
