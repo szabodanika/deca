@@ -12,7 +12,7 @@ import setproctitle
 import math
 import atexit
 
-# system constants
+# default system constants
 CAPACITY = 8
 MIN_STANDBY_CA = 2
 # how many CAs to start up at a time
@@ -20,7 +20,7 @@ CA_INCREMENTS = 2
 MIN_IDLE_CA = 2
 
 # check if we need to shut down idle nodes every x seconds
-CHECK_SHUTDOWN_NEEDED_DELAY_SEC = 5
+CHECK_SHUTDOWN_NEEDED_DELAY_SEC = 10
 
 # default port if not specified with argument
 PORT = 8000
@@ -86,8 +86,8 @@ def main(args) -> None:
         initialising_ca_servers_thread.start()
 
          # 3. start up periodic idle count checker
-        # check_shutdown_needed_thread = threading.Thread(target=check_shutdown_needed)
-        # check_shutdown_needed_thread.start()
+        check_shutdown_needed_thread = threading.Thread(target=check_shutdown_needed)
+        check_shutdown_needed_thread.start()
     except KeyboardInterrupt:
         sys.exit(1)
 
@@ -175,12 +175,6 @@ def listen() -> None:
             return {
                 'error': 'server capacity reached'
             }
-        
-        elif(status_count('idle') < MIN_IDLE_CA):
-            # only one idle left, but there is more capacity so we can 
-            # start up more CAs
-            print("[SS NODE] starting up more CA servers")
-            init_ca_servers(count = CA_INCREMENTS)
 
         # let's give the embodiment a node ID
         new_node_id = generate_id()
@@ -205,6 +199,12 @@ def listen() -> None:
         for i, ca in ca_registry.items():
             if(ca['id'] == assigned_ca['id']):
                 ca_registry[i]['status'] = 'online'
+
+        if(status_count('idle') < MIN_IDLE_CA):
+            # only one idle left, but there is more capacity so we can 
+            # start up more CAs
+            print("[SS NODE] starting up more CA servers")
+            init_ca_servers(count = CA_INCREMENTS)
 
         return {
             'host': assigned_ca['host'],
